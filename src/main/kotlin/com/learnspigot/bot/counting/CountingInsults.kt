@@ -93,18 +93,6 @@ object CountingInsults {
         "Your counting is like a rerun of a bad TV show - nobody wants to see it twice.",
         "Did you think the numbers were going to disappear if you didn't count them again?",
         "You're like a child asking 'are we there yet?' but with numbers.",
-        "Did you think the numbers were going to change their minds if you counted them twice?",
-        "Your counting is like a bad sequel - nobody asked for it.",
-        "Did you think the numbers were playing a disappearing act?",
-        "I guess you just wanted to give the numbers a second chance to be counted.",
-        "Is this your way of ensuring job security for counters everywhere?",
-        "Your counting is like Groundhog Day - the same numbers over and over again.",
-        "Did you accidentally press the refresh button on your counting app?",
-        "You're like a broken vending machine - you keep giving out the same numbers.",
-        "Did you think the numbers were playing hide and seek with you?",
-        "Your counting is like a rerun of a bad TV show - nobody wants to see it twice.",
-        "Did you think the numbers were going to disappear if you didn't count them again?",
-        "You're like a child asking 'are we there yet?' but with numbers.",
         "Did you think the numbers were going to change their minds if you counted them twice?"
     )
 }

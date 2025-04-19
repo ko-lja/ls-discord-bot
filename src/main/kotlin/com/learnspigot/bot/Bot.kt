@@ -23,11 +23,23 @@ import net.dv8tion.jda.api.utils.ChunkingFilter
 import net.dv8tion.jda.api.utils.MemberCachePolicy
 
 class Bot {
+    companion object {
+        lateinit var jda: JDA
+    }
+
     private val profileRegistry = ProfileRegistry()
     private val countingRegistry = CountingRegistry(this)
+    private val guild = jda.getGuildById(Environment["GUILD_ID"])!!
 
     init {
-        jda = JDABuilder.createDefault(Environment.get("BOT_TOKEN"))
+        initializeJDA()
+        initializeServer()
+        initializeCommands()
+        initializeNeptune()
+    }
+
+    private fun initializeJDA() {
+        jda = JDABuilder.createDefault(Environment["BOT_TOKEN"])
             .setActivity(Activity.watching("learnspigot.com"))
             .enableIntents(
                 GatewayIntent.GUILD_MESSAGES,
@@ -40,19 +52,26 @@ class Bot {
             .setChunkingFilter(ChunkingFilter.ALL)
             .build()
             .awaitReady()
+    }
 
-        run { Server } // intentional to initialize vals
-
-        val guild = jda.getGuildById(Environment.get("GUILD_ID"))!!
+    private fun initializeServer() {
+        Server
         VerificationMessage(guild)
         LeaderboardMessage(profileRegistry)
+    }
 
+    private fun initializeCommands() {
         guild.updateCommands().addCommands(
-            Commands.context(Command.Type.MESSAGE, "Set vote").setDefaultPermissions(DefaultMemberPermissions.enabledFor(PermissionRole.STUDENT)),
-            Commands.context(Command.Type.MESSAGE, "Set Tutorial vote").setDefaultPermissions(DefaultMemberPermissions.enabledFor(PermissionRole.EXPERT)),
-            Commands.context(Command.Type.MESSAGE, "Set Project vote").setDefaultPermissions(DefaultMemberPermissions.enabledFor(PermissionRole.EXPERT))
+            Commands.context(Command.Type.MESSAGE, "Set vote")
+                .setDefaultPermissions(DefaultMemberPermissions.enabledFor(PermissionRole.STUDENT)),
+            Commands.context(Command.Type.MESSAGE, "Set Tutorial vote")
+                .setDefaultPermissions(DefaultMemberPermissions.enabledFor(PermissionRole.EXPERT)),
+            Commands.context(Command.Type.MESSAGE, "Set Project vote")
+                .setDefaultPermissions(DefaultMemberPermissions.enabledFor(PermissionRole.EXPERT))
         ).complete()
+    }
 
+    private fun initializeNeptune() {
         Neptune.Builder(jda, this)
             .addGuilds(guild)
             .clearCommands(false)
@@ -60,40 +79,11 @@ class Bot {
             .create()
     }
 
-    @Instantiate
-    fun profileRegistry(): ProfileRegistry {
-        return profileRegistry
-    }
-
-    @Instantiate
-    fun lectureRegistry(): LectureRegistry {
-        return LectureRegistry()
-    }
-
-    @Instantiate
-    fun starboardRegistry(): StarboardRegistry {
-        return StarboardRegistry()
-    }
-
-    @Instantiate
-    fun keyRegistry(): IJUltimateKeyRegistry {
-        return IJUltimateKeyRegistry()
-    }
-
-    @Instantiate
-    fun knowledgebasePostRegistry(): KnowledgebasePostRegistry {
-        return KnowledgebasePostRegistry()
-    }
-
-    @Instantiate
-    fun helpPostRegistry(): HelpPostRegistry {
-        return HelpPostRegistry()
-    }
-
-    @Instantiate fun countingRegistry(): CountingRegistry = countingRegistry
-
-    companion object {
-        lateinit var jda: JDA
-    }
-
+    @Instantiate fun profileRegistry() = profileRegistry
+    @Instantiate fun lectureRegistry() = LectureRegistry()
+    @Instantiate fun starboardRegistry() = StarboardRegistry()
+    @Instantiate fun keyRegistry() = IJUltimateKeyRegistry()
+    @Instantiate fun knowledgebasePostRegistry() = KnowledgebasePostRegistry()
+    @Instantiate fun helpPostRegistry() = HelpPostRegistry()
+    @Instantiate fun countingRegistry() = countingRegistry
 }

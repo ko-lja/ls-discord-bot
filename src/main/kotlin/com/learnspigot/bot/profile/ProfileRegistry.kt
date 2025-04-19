@@ -8,77 +8,72 @@ import org.bson.Document
 import java.util.*
 
 class ProfileRegistry {
-
     val profileCache: MutableMap<String, Profile> = TreeMap(String.CASE_INSENSITIVE_ORDER)
     private val urlProfiles: MutableMap<String, Profile> = TreeMap()
-
     val contributorSelectorCache: MutableMap<String, List<String>> = HashMap()
     val messagesToRemove: MutableMap<String, Message> = HashMap()
 
     init {
         Mongo.userCollection.find().forEach { document ->
-            val reputation: NavigableMap<Int, Reputation> = TreeMap()
-            document.get("reputation", Document::class.java).forEach { id, rep ->
-                val repDocument = rep as Document
+            createProfileFromDocument(document)?.let { profile ->
+                profileCache[profile.id] = profile
+                profile.udemyProfileUrl?.let { url -> urlProfiles[url] = profile }
+            }
+        }
+    }
+
+    private fun createProfileFromDocument(document: Document): Profile? {
+        val reputation = TreeMap<Int, Reputation>()
+        document.get("reputation", Document::class.java)?.forEach { id, rep ->
+            (rep as? Document)?.let { repDoc ->
                 reputation[id.toInt()] = Reputation(
-                    convertToLongTimestamp(repDocument["timestamp"]!!),
-                    repDocument.getString("fromMemberId"),
-                    repDocument.getString("fromPostId"))
-            }
-
-            Profile(
-                document.getString("_id"),
-                document.getString("tag"),
-                document.getString("udemyProfileUrl"),
-                reputation,
-                document.getBoolean("notifyOnRep", true),
-                document.getBoolean("intellijKeyGiven", false),
-                document.getInteger("highestCount", 0),
-                document.getInteger("totalCounts", 0),
-                document.getInteger("countingFuckUps", 0)
-            ).let {
-                profileCache[it.id] = it
-                if (it.udemyProfileUrl != null)
-                    urlProfiles[it.udemyProfileUrl!!] = it
+                    convertToLongTimestamp(repDoc["timestamp"]!!),
+                    repDoc.getString("fromMemberId"),
+                    repDoc.getString("fromPostId")
+                )
             }
         }
+
+        return Profile(
+            document.getString("_id") ?: return null,
+            document.getString("tag"),
+            document.getString("udemyProfileUrl"),
+            reputation,
+            document.getBoolean("notifyOnRep", true),
+            document.getBoolean("intellijKeyGiven", false),
+            document.getInteger("highestCount", 0),
+            document.getInteger("totalCounts", 0),
+            document.getInteger("countingFuckUps", 0)
+        )
     }
 
-    // I don't even care enough to sort this bug so have this function instead
-    // Basically at some point they've been saving as Ints and some points Longs. So now we must read both. .-.
-    private fun convertToLongTimestamp(timestamp: Any): Long {
-        return when (timestamp) {
-            is Int -> timestamp.toLong()
-            is Long -> timestamp.toLong()
-            is String -> timestamp.toLongOrNull() ?: throw IllegalArgumentException("Invalid timestamp format")
-            else -> throw IllegalArgumentException("Unsupported timestamp format")
+    private fun convertToLongTimestamp(timestamp: Any): Long = when (timestamp) {
+        is Int -> timestamp.toLong()
+        is Long -> timestamp
+        is String -> timestamp.toLongOrNull() ?: throw IllegalArgumentException("Invalid timestamp format")
+        else -> throw IllegalArgumentException("Unsupported timestamp format")
+    }
+
+    fun findById(id: String): Profile? = profileCache[id]
+
+    fun findByUser(user: User): Profile = findById(user.id) ?: createNewProfile(user)
+
+    private fun createNewProfile(user: User): Profile {
+        return Profile(
+            user.id,
+            user.name,
+            null,
+            TreeMap(),
+            true,
+            false,
+            0,
+            0,
+            0
+        ).apply {
+            profileCache[user.id] = this
+            save()
         }
     }
 
-    fun findById(id: String): Profile? {
-        return profileCache[id]
-    }
-
-    fun findByUser(user: User): Profile {
-        return findById(user.id) ?: run {
-            Profile(
-                user.id,
-                user.name,
-                null,
-                TreeMap(),
-                true,
-                false,
-                0,
-                0,
-                0,
-            ).apply {
-                    profileCache[user.id] = this
-                    save()
-                }
-        }
-    }
-
-    fun findByURL(udemyURL: String): Profile? {
-        return urlProfiles[udemyURL]
-    }
+    fun findByURL(udemyURL: String): Profile? = urlProfiles[udemyURL]
 }

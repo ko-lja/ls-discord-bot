@@ -10,7 +10,6 @@ import net.dv8tion.jda.api.entities.User
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent
 
 class CountingCommand {
-
     @Inject private lateinit var profileRegistry: ProfileRegistry
     @Inject private lateinit var countingRegistry: CountingRegistry
 
@@ -19,37 +18,33 @@ class CountingCommand {
         event: SlashCommandInteractionEvent,
         @Description("User's stats to view") @Optional user: User?
     ) {
-        if (user == null) { // Server Stats
-            event.replyEmbeds(
-                embed()
-                    .setTitle("Server counting statistics")
-                    .setDescription("""
-                        - Last Count: ${countingRegistry.currentCount}
-                        - Total Counts: ${countingRegistry.serverTotalCounts}
-                        - Highest Count: ${countingRegistry.topServerCount}
-                    """.trimIndent())
-                    .addField(
-                        "Top 5 counters",
-                        countingRegistry.getTop5().joinToString("") { profile ->
-                            "\n- <@${profile.id}>: ${profile.totalCounts}"
-                        },
-                        false
-                    )
-                    .build()
-            ).setEphemeral(true).queue()
-        } else { // Individual Stats
-            val profile = profileRegistry.findByUser(user)
-            event.replyEmbeds(
-                embed()
-                    .setTitle(user.name + "'s counting statistics")
-                    .setDescription("""
-                        - Total Counts: ${profile.totalCounts}
-                        - Highest Count: ${profile.highestCount}
-                        - Mistakes: ${profile.countingFuckUps}
-                    """.trimIndent())
-                    .build()
-            ).setEphemeral(true).queue()
-        }
-
+        event.replyEmbeds(
+            if (user == null) createServerStatsEmbed() else createUserStatsEmbed(user)
+        ).setEphemeral(true).queue()
     }
+
+    private fun createServerStatsEmbed() = embed()
+        .setTitle("Server counting statistics")
+        .setDescription("""
+            - Last Count: ${countingRegistry.currentCount}
+            - Total Counts: ${countingRegistry.serverTotalCounts}
+            - Highest Count: ${countingRegistry.topServerCount}
+        """.trimIndent())
+        .addField(
+            "Top 5 counters",
+            countingRegistry.getTop5().joinToString("") { profile ->
+                "\n- <@${profile.id}>: ${profile.totalCounts}"
+            },
+            false
+        )
+        .build()
+
+    private fun createUserStatsEmbed(user: User) = embed()
+        .setTitle("${user.name}'s counting statistics")
+        .setDescription("""
+            - Total Counts: ${profileRegistry.findByUser(user).totalCounts}
+            - Highest Count: ${profileRegistry.findByUser(user).highestCount}
+            - Mistakes: ${profileRegistry.findByUser(user).countingFuckUps}
+        """.trimIndent())
+        .build()
 }

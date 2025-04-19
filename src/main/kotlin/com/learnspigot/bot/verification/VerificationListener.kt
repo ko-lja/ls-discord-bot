@@ -27,204 +27,221 @@ class VerificationListener : ListenerAdapter() {
     override fun onButtonInteraction(e: ButtonInteractionEvent) {
         if (e.button.id == null) return
 
-        if (e.button.id.equals("verify")) {
-            if (e.member!!.roles.contains(e.jda.getRoleById(Environment.get("STUDENT_ROLE_ID")))) {
-                e.reply("You're already a student!").setEphemeral(true).queue()
-                return
-            }
-
-            val verifyModal = Modal.create("verify", "Verify Your Profile")
-                .addActionRows(
-                    ActionRow.of(
-                        TextInput.create("url", "Udemy Profile URL", TextInputStyle.SHORT)
-                            .setPlaceholder("https://www.udemy.com/user/example")
-                            .setMinLength(10)
-                            .setMaxLength(70)
-                            .setRequired(true)
-                            .build()
-                    ),
-                    ActionRow.of(
-                        TextInput.create("personal_plan", "On Personal/Business Subscription?", TextInputStyle.SHORT)
-                            .setPlaceholder("Yes/No - If you purchased the course directly, answer No")
-                            .setMinLength(2)
-                            .setMaxLength(3)
-                            .setRequired(false)
-                            .build()
-                    )
-                )
-                .build()
-
-            e.replyModal(verifyModal).queue()
-            return
-        }
-
-        val info = e.button.id!!.split("|")
-        val action = info[1]
-
-        if (e.button.id!!.startsWith("v|")) {
-            val guild = e.guild!!
-
-            val allowedRoles = listOf(
-                Environment.get("SUPPORT_ROLE_ID"),
-                Environment.get("STAFF_ROLE_ID"),
-                Environment.get("MANAGEMENT_ROLE_ID"),
-                Environment.get("VERIFIER_ROLE_ID")
-            )
-            val memberRoles = e.member!!.roles.map { it.id }
-
-            if (allowedRoles.none { it in memberRoles }) {
-                e.reply("Sorry, you can't verify student profiles.").setEphemeral(true).queue()
-                return
-            }
-
-            val url = info[2]
-            val member = guild.getMemberById(info[3]) ?: return
-            val questionChannel = guild.getTextChannelById(Environment.get("QUESTIONS_CHANNEL_ID"))
-
-            var description = ""
-
-            when (action) {
-                "a" -> {
-                    description = "has approved :mention:'s profile"
-
-                    guild.addRoleToMember(member, guild.getRoleById(Environment.get("STUDENT_ROLE_ID"))!!).queue()
-
-                    guild.getTextChannelById(Environment.get("GENERAL_CHANNEL_ID"))!!.sendMessageEmbeds(
-                        embed()
-                            .setTitle("Welcome")
-                            .setDescription("Please welcome " + member.asMention + " as a new Student! :heart:").build()
-                    ).queue()
-
-                    member.user.openPrivateChannel().queue({ channel ->
-                        channel.sendMessageEmbeds(
-                            embed()
-                                .setTitle("Profile Verification")
-                                .setDescription("Your profile was approved! Go ahead and enjoy our community :heart:")
-                                .setFooter("PS: Want your free 6 months IntelliJ Ultimate key? Run /getkey in the Discord server!")
-                                .build()
-                        ).queue(null, ErrorHandler().handle(ErrorResponse.CANNOT_SEND_TO_USER) {
-                        })
-                    }, null)
-
-                    profileRegistry.findByUser(member.user).let {
-                        it.udemyProfileUrl = url
-                        it.save()
-                    }
-                }
-
-                "wl" -> {
-                    description = "hasn't approved :mention:, as they specified an invalid link"
-
-                    questionChannel!!.sendMessage(member.asMention).setEmbeds(
-                        embed()
-                            .setTitle("Profile Verification")
-                            .setDescription(
-                                """
-                                Staff looked at your profile and found that you have sent the wrong profile link!
-                                                                        
-                                The URL you need to use is the link to your public profile, to get this:
-                                :one: Hover over your profile picture in the top right on Udemy
-                                :two: Select "Public profile" from the dropdown menu
-                                :three: Copy the link from your browser
-                                """
-                            )
-                            .build()
-                    ).queue()
-                }
-
-                "ch" -> {
-                    description = "hasn't approved :mention:, as they're unable to view their courses"
-
-                    questionChannel!!.sendMessage(member.asMention).setEmbeds(
-                        embed()
-                            .setTitle("Profile Verification")
-                            .setDescription("""
-                Staff looked at your profile and found that you have privacy settings disabled which means we can't see your courses.
-                                                
-                Change here: <https://www.udemy.com/instructor/profile/privacy/>
-                                                
-                Enable "Show courses you're taking on your profile page" and verify again!
-                """)
-                            .build()
-                    ).queue()
-                }
-
-                "no" -> {
-                    description = "hasn't approved :mention:, as they do not own the course"
-
-                    questionChannel!!.sendMessage(member.asMention).setEmbeds(
-                        embed()
-                            .setTitle("Profile Verification")
-                            .setDescription("Staff looked at your profile and found that you do not own the course. If you have purchased the course, please make sure it's visible on your public profile.")
-                            .build()
-                    ).queue()
-                }
-
-                "u" -> {
-                    val originalActionTaker = info[4]
-                    if (e.member!!.id != originalActionTaker && !e.member!!.roles.contains(e.guild!!.getRoleById(Environment.get("MANAGEMENT_ROLE_ID"))!!)) {
-                        e.reply("Sorry, you can't undo that verification decision.").setEphemeral(true).queue()
-                        return
-                    }
-
-                    guild.removeRoleFromMember(member, guild.getRoleById(Environment.get("STUDENT_ROLE_ID"))!!).queue()
-                    e.message.editMessageEmbeds(
-                        embed()
-                            .setTitle("Profile Verification")
-                            .setDescription(
-                                "Please verify that " + member.asMention + " owns the course." +
-                                        "\n\nPrevious action reverted by: ${e.member!!.asMention}"
-                            )
-                            .addField("Udemy Link", url, false)
-                            .build()
-                    )
-                        .setActionRow(
-                            Button.success("v|a|" + url + "|" + member.id, "Approve"),
-                            Button.danger("v|wl|" + url + "|" + member.id, "Wrong Link"),
-                            Button.danger("v|ch|" + url + "|" + member.id, "Courses Hidden"),
-                            Button.danger("v|no|" + url + "|" + member.id, "Not Owned")
-                        )
-                        .queue()
-
-                    e.interaction.deferEdit().queue()
-
-                    questionChannel!!.sendMessage(member.asMention).setEmbeds(
-                        embed()
-                            .setTitle("Profile Verification")
-                            .setDescription(
-                                "Please disregard the previous message regarding your verification status - a staff member has reverted the action. Please remain patient while waiting for a corrected decision.\n\n" +
-                                        "If you were previously verified and granted the Student role, the role has been removed pending the corrected decision from staff."
-                            )
-                            .build()
-                    ).queue()
-
-                    return
-                }
-            }
-
-            e.message.editMessageEmbeds(
-                embed()
-                    .setTitle("Profile Verification")
-                    .setDescription(
-                        e.member!!.asMention + " " + description.replace(
-                            ":mention:",
-                            member.asMention
-                        ) + "."
-                    )
-                    .build()
-            )
-                .setActionRow(
-                    Button.danger("v|u|" + url + "|" + member.id + "|" + e.member!!.id, "Undo")
-                )
-                .queue()
-
-            e.interaction.deferEdit().queue()
+        when {
+            e.button.id == "verify" -> handleVerifyButton(e)
+            e.button.id!!.startsWith("v|") -> handleVerificationAction(e)
         }
     }
 
+    private fun handleVerifyButton(e: ButtonInteractionEvent) {
+        if (e.member!!.roles.contains(e.jda.getRoleById(Environment["STUDENT_ROLE_ID"]))) {
+            e.reply("You're already a student!").setEphemeral(true).queue()
+            return
+        }
+
+        val verifyModal = createVerificationModal()
+        e.replyModal(verifyModal).queue()
+    }
+
+    private fun createVerificationModal() = Modal.create("verify", "Verify Your Profile")
+        .addActionRows(
+            ActionRow.of(
+                TextInput.create("url", "Udemy Profile URL", TextInputStyle.SHORT)
+                    .setPlaceholder("https://www.udemy.com/user/example")
+                    .setMinLength(10)
+                    .setMaxLength(70)
+                    .setRequired(true)
+                    .build()
+            ),
+            ActionRow.of(
+                TextInput.create("personal_plan", "On Personal/Business Subscription?", TextInputStyle.SHORT)
+                    .setPlaceholder("Yes/No - If you purchased the course directly, answer No")
+                    .setMinLength(2)
+                    .setMaxLength(3)
+                    .setRequired(false)
+                    .build()
+            )
+        )
+        .build()
+
+    private fun handleVerificationAction(e: ButtonInteractionEvent) {
+        val info = e.button.id!!.split("|")
+        val action = info[1]
+        val guild = e.guild!!
+
+        if (!hasVerificationPermission(e)) {
+            e.reply("Sorry, you can't verify student profiles.").setEphemeral(true).queue()
+            return
+        }
+
+        val url = info[2]
+        val member = guild.getMemberById(info[3]) ?: return
+        val questionChannel = guild.getTextChannelById(Environment["QUESTIONS_CHANNEL_ID"])
+
+        when (action) {
+            "a" -> handleApproval(e, member, url, questionChannel)
+            "wl" -> handleWrongLink(e, member, questionChannel)
+            "ch" -> handleCoursesHidden(e, member, questionChannel)
+            "no" -> handleNotOwned(e, member, questionChannel)
+            "u" -> handleUndo(e, info, member, url, questionChannel)
+        }
+    }
+
+    private fun hasVerificationPermission(e: ButtonInteractionEvent): Boolean {
+        val allowedRoles = listOf(
+            Environment["SUPPORT_ROLE_ID"],
+            Environment["STAFF_ROLE_ID"],
+            Environment["MANAGEMENT_ROLE_ID"],
+            Environment["VERIFIER_ROLE_ID"]
+        )
+        val memberRoles = e.member!!.roles.map { it.id }
+        return allowedRoles.any { it in memberRoles }
+    }
+
+    private fun handleApproval(e: ButtonInteractionEvent, member: net.dv8tion.jda.api.entities.Member, url: String, questionChannel: net.dv8tion.jda.api.entities.channel.concrete.TextChannel?) {
+        val guild = e.guild!!
+        guild.addRoleToMember(member, guild.getRoleById(Environment["STUDENT_ROLE_ID"])!!).queue()
+
+        guild.getTextChannelById(Environment["GENERAL_CHANNEL_ID"])!!.sendMessageEmbeds(
+            embed()
+                .setTitle("Welcome")
+                .setDescription("Please welcome ${member.asMention} as a new Student! :heart:").build()
+        ).queue()
+
+        sendPrivateMessage(member, "Your profile was approved! Go ahead and enjoy our community :heart:")
+
+        profileRegistry.findByUser(member.user).let {
+            it.udemyProfileUrl = url
+            it.save()
+        }
+
+        updateVerificationMessage(e, member, "has approved :mention:'s profile")
+    }
+
+    private fun handleWrongLink(e: ButtonInteractionEvent, member: net.dv8tion.jda.api.entities.Member, questionChannel: net.dv8tion.jda.api.entities.channel.concrete.TextChannel?) {
+        questionChannel!!.sendMessage(member.asMention).setEmbeds(
+            embed()
+                .setTitle("Profile Verification")
+                .setDescription(
+                    """
+                    Staff looked at your profile and found that you have sent the wrong profile link!
+                    
+                    The URL you need to use is the link to your public profile, to get this:
+                    :one: Hover over your profile picture in the top right on Udemy
+                    :two: Select "Public profile" from the dropdown menu
+                    :three: Copy the link from your browser
+                    """
+                )
+                .build()
+        ).queue()
+
+        updateVerificationMessage(e, member, "hasn't approved :mention:, as they specified an invalid link")
+    }
+
+    private fun handleCoursesHidden(e: ButtonInteractionEvent, member: net.dv8tion.jda.api.entities.Member, questionChannel: net.dv8tion.jda.api.entities.channel.concrete.TextChannel?) {
+        questionChannel!!.sendMessage(member.asMention).setEmbeds(
+            embed()
+                .setTitle("Profile Verification")
+                .setDescription(
+                    """
+                    Staff looked at your profile and found that you have privacy settings disabled which means we can't see your courses.
+                    
+                    Change here: <https://www.udemy.com/instructor/profile/privacy/>
+                    
+                    Enable "Show courses you're taking on your profile page" and verify again!
+                    """
+                )
+                .build()
+        ).queue()
+
+        updateVerificationMessage(e, member, "hasn't approved :mention:, as they're unable to view their courses")
+    }
+
+    private fun handleNotOwned(e: ButtonInteractionEvent, member: net.dv8tion.jda.api.entities.Member, questionChannel: net.dv8tion.jda.api.entities.channel.concrete.TextChannel?) {
+        questionChannel!!.sendMessage(member.asMention).setEmbeds(
+            embed()
+                .setTitle("Profile Verification")
+                .setDescription("Staff looked at your profile and found that you do not own the course. If you have purchased the course, please make sure it's visible on your public profile.")
+                .build()
+        ).queue()
+
+        updateVerificationMessage(e, member, "hasn't approved :mention:, as they do not own the course")
+    }
+
+    private fun handleUndo(e: ButtonInteractionEvent, info: List<String>, member: net.dv8tion.jda.api.entities.Member, url: String, questionChannel: net.dv8tion.jda.api.entities.channel.concrete.TextChannel?) {
+        val originalActionTaker = info[4]
+        if (e.member!!.id != originalActionTaker && !e.member!!.roles.contains(e.guild!!.getRoleById(Environment["MANAGEMENT_ROLE_ID"])!!)) {
+            e.reply("Sorry, you can't undo that verification decision.").setEphemeral(true).queue()
+            return
+        }
+
+        val guild = e.guild!!
+        guild.removeRoleFromMember(member, guild.getRoleById(Environment["STUDENT_ROLE_ID"])!!).queue()
+
+        e.message.editMessageEmbeds(
+            embed()
+                .setTitle("Profile Verification")
+                .setDescription(
+                    "Please verify that ${member.asMention} owns the course.\n\nPrevious action reverted by: ${e.member!!.asMention}"
+                )
+                .addField("Udemy Link", url, false)
+                .build()
+        )
+            .setActionRow(
+                Button.success("v|a|$url|${member.id}", "Approve"),
+                Button.danger("v|wl|$url|${member.id}", "Wrong Link"),
+                Button.danger("v|ch|$url|${member.id}", "Courses Hidden"),
+                Button.danger("v|no|$url|${member.id}", "Not Owned")
+            )
+            .queue()
+
+        e.interaction.deferEdit().queue()
+
+        questionChannel!!.sendMessage(member.asMention).setEmbeds(
+            embed()
+                .setTitle("Profile Verification")
+                .setDescription(
+                    """
+                    Please disregard the previous message regarding your verification status - a staff member has reverted the action. Please remain patient while waiting for a corrected decision.
+                    
+                    If you were previously verified and granted the Student role, the role has been removed pending the corrected decision from staff.
+                    """
+                )
+                .build()
+        ).queue()
+    }
+
+    private fun updateVerificationMessage(e: ButtonInteractionEvent, member: net.dv8tion.jda.api.entities.Member, description: String) {
+        e.message.editMessageEmbeds(
+            embed()
+                .setTitle("Profile Verification")
+                .setDescription(
+                    "${e.member!!.asMention} ${description.replace(":mention:", member.asMention)}."
+                )
+                .build()
+        )
+            .setActionRow(
+                Button.danger("v|u|${e.button.id!!.split("|")[2]}|${member.id}|${e.member!!.id}", "Undo")
+            )
+            .queue()
+
+        e.interaction.deferEdit().queue()
+    }
+
+    private fun sendPrivateMessage(member: net.dv8tion.jda.api.entities.Member, message: String) {
+        member.user.openPrivateChannel().queue({ channel ->
+            channel.sendMessageEmbeds(
+                embed()
+                    .setTitle("Profile Verification")
+                    .setDescription(message)
+                    .setFooter("PS: Want your free 6 months IntelliJ Ultimate key? Run /getkey in the Discord server!")
+                    .build()
+            ).queue(null, ErrorHandler().handle(ErrorResponse.CANNOT_SEND_TO_USER) {})
+        }, null)
+    }
+
     override fun onModalInteraction(e: ModalInteractionEvent) {
-        if (e.interaction.type != InteractionType.MODAL_SUBMIT) return
-        if (e.modalId != "verify") return
+        if (e.interaction.type != InteractionType.MODAL_SUBMIT || e.modalId != "verify") return
 
         var url = e.getValue("url")!!.asString
         val isPersonalPlan = e.getValue("personal_plan")?.asString?.lowercase() == "yes"
@@ -234,7 +251,7 @@ class VerificationListener : ListenerAdapter() {
             return
         }
 
-        if (e.member!!.roles.contains(e.jda.getRoleById(Environment.get("STUDENT_ROLE_ID")))) {
+        if (e.member!!.roles.contains(e.jda.getRoleById(Environment["STUDENT_ROLE_ID"]))) {
             e.reply("You're already a Student!").setEphemeral(true).queue()
             return
         }
@@ -250,44 +267,27 @@ class VerificationListener : ListenerAdapter() {
                 )
             ) > 0
         ) {
-            e.reply("Somebody has already verified with this profile. Was this not you? Let staff know.")
-                .setEphemeral(true).queue()
+            e.reply("This profile has already been verified.").setEphemeral(true).queue()
             return
         }
 
-        e.replyEmbeds(
-            embed()
-                .setTitle("Your profile has been received!")
-                .setDescription(
-                    """
-                    Please wait a short while as staff verify that you own the course! Once verified, this channel will disappear and you'll be able to talk in the rest of the server.
-                    
-                    If you have any concerns, please ask in <#${Environment.get("QUESTIONS_CHANNEL_ID")}>."""
-                )
-                .build()
-        ).setEphemeral(true).queue()
-
-        val supportChannel = e.jda.getTextChannelById(Environment.get("SUPPORT_CHANNEL_ID"))!!
-        val verificationEmbed = embed()
+        val embed = embed()
             .setTitle("Profile Verification")
-            .setDescription("Verify that " + e.member!!.asMention + " owns the course." +
-                    (if (isPersonalPlan) "\n\nNote: Student claims to be on Udemy Personal or Business Plan." else ""))
+            .setDescription("Please verify that ${e.member!!.asMention} owns the course.")
             .addField("Udemy Link", url, false)
             .build()
 
-        val mentionContent = if (isPersonalPlan) {
-            "<@${Environment.get("STEPHEN_USER_ID")}>"
-        } else {
-            "<@&${Environment.get("VERIFIER_ROLE_ID")}> New verification request."
-        }
+        val buttons = listOf(
+            Button.success("v|a|$url|${e.member!!.id}", "Approve"),
+            Button.danger("v|wl|$url|${e.member!!.id}", "Wrong Link"),
+            Button.danger("v|ch|$url|${e.member!!.id}", "Courses Hidden"),
+            Button.danger("v|no|$url|${e.member!!.id}", "Not Owned")
+        )
 
-        supportChannel.sendMessage(mentionContent)
-            .addEmbeds(verificationEmbed)
-            .addActionRow(
-                Button.success("v|a|" + url + "|" + e.member!!.id, "Approve"),
-                Button.danger("v|wl|" + url + "|" + e.member!!.id, "Wrong Link"),
-                Button.danger("v|ch|" + url + "|" + e.member!!.id, "Courses Hidden"),
-                Button.danger("v|no|" + url + "|" + e.member!!.id, "Not Owned")
-            ).queue()
+        e.jda.getTextChannelById(Environment["VERIFY_CHANNEL_ID"])!!.sendMessageEmbeds(embed)
+            .setActionRow(buttons)
+            .queue()
+
+        e.reply("Your verification request has been sent to the staff team.").setEphemeral(true).queue()
     }
 }

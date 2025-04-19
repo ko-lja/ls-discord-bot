@@ -25,14 +25,14 @@ data class Profile(
 ) {
 
     fun addReputation(user: User, fromUserId: String, fromPostId: String, amount: Int) {
-        for (i in 0 until amount)
-            reputation[if (reputation.isEmpty()) 0 else reputation.lastKey() + 1] =
-                Reputation(Instant.now().epochSecond, fromUserId, fromPostId)
-
+        val startKey = if (reputation.isEmpty()) 0 else reputation.lastKey() + 1
+        (startKey until startKey + amount).forEach { key ->
+            reputation[key] = Reputation(Instant.now().epochSecond, fromUserId, fromPostId)
+        }
         save()
 
-        user.openPrivateChannel().complete().let {
-            it.sendMessageEmbeds(
+        user.openPrivateChannel().complete().let { channel ->
+            channel.sendMessageEmbeds(
                 embed()
                     .setAuthor("You have ${reputation.size} reputation in total")
                     .setTitle("You earned ${if (amount == 1) "" else "$amount "}reputation")
@@ -43,28 +43,28 @@ data class Profile(
     }
 
     fun removeReputation(startId: Int, endId: Int) {
-        for (i in startId..endId) {
-            reputation.remove(i)
-        }
+        (startId..endId).forEach { reputation.remove(it) }
         save()
     }
 
     fun save() {
-        val document = Document()
-        document["_id"] = id
-        document["tag"] = tag
-        document["udemyProfileUrl"] = udemyProfileUrl
-        val reputationDocument = Document()
-        reputation.forEach { (id, rep) ->
-            reputationDocument[id.toString()] = rep.document()
-        }
-        document["reputation"] = reputationDocument
-        document["notifyOnRep"] = notifyOnRep
-        document["intellijKeyGiven"] = intellijKeyGiven
-        document["highestCount"] = highestCount
-        document["totalCounts"] = totalCounts
-        document["countingFuckUps"] = countingFuckUps
-        Mongo.userCollection.replaceOne(Filters.eq("_id", id), document, ReplaceOptions().upsert(true))
+        Mongo.userCollection.replaceOne(
+            Filters.eq("_id", id),
+            Document().apply {
+                put("_id", id)
+                put("tag", tag)
+                put("udemyProfileUrl", udemyProfileUrl)
+                put("reputation", Document().apply {
+                    reputation.forEach { (id, rep) -> put(id.toString(), rep.document()) }
+                })
+                put("notifyOnRep", notifyOnRep)
+                put("intellijKeyGiven", intellijKeyGiven)
+                put("highestCount", highestCount)
+                put("totalCounts", totalCounts)
+                put("countingFuckUps", countingFuckUps)
+            },
+            ReplaceOptions().upsert(true)
+        )
     }
 
     fun incrementCount(currentCount: Int) {
@@ -79,11 +79,14 @@ data class Profile(
     }
 
     private fun saveCounting() {
-        val doc = Mongo.userCollection.find(Filters.eq("_id", id)).first()!!
-        doc["highestCount"] = highestCount
-        doc["totalCounts"] = totalCounts
-        doc["countingFuckUps"] = countingFuckUps
-        Mongo.userCollection.replaceOne(Filters.eq("_id", id), doc, ReplaceOptions().upsert(true))
+        Mongo.userCollection.find(Filters.eq("_id", id)).first()?.let { doc ->
+            doc.apply {
+                put("highestCount", highestCount)
+                put("totalCounts", totalCounts)
+                put("countingFuckUps", countingFuckUps)
+            }
+            Mongo.userCollection.replaceOne(Filters.eq("_id", id), doc, ReplaceOptions().upsert(true))
+        }
     }
 
 }
