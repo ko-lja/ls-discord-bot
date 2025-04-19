@@ -19,11 +19,11 @@ class CountingCommand {
         @Description("User's stats to view") @Optional user: User?
     ) {
         event.replyEmbeds(
-            if (user == null) createServerStatsEmbed() else createUserStatsEmbed(user)
+            if (user == null) serverStats() else userStats(user)
         ).setEphemeral(true).queue()
     }
 
-    private fun createServerStatsEmbed() = embed()
+    private fun serverStats() = embed()
         .setTitle("Server counting statistics")
         .setDescription("""
             - Last Count: ${countingRegistry.currentCount}
@@ -39,7 +39,7 @@ class CountingCommand {
         )
         .build()
 
-    private fun createUserStatsEmbed(user: User) = embed()
+    private fun userStats(user: User) = embed()
         .setTitle("${user.name}'s counting statistics")
         .setDescription("""
             - Total Counts: ${profileRegistry.findByUser(user).totalCounts}

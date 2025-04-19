@@ -6,6 +6,8 @@ import com.learnspigot.bot.util.Mongo
 import com.learnspigot.bot.util.embed
 import com.mongodb.client.model.Filters
 import gg.flyte.neptune.annotation.Inject
+import net.dv8tion.jda.api.entities.Member
+import net.dv8tion.jda.api.entities.channel.concrete.TextChannel
 import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent
 import net.dv8tion.jda.api.exceptions.ErrorHandler
@@ -79,11 +81,11 @@ class VerificationListener : ListenerAdapter() {
         val questionChannel = guild.getTextChannelById(Environment["QUESTIONS_CHANNEL_ID"])
 
         when (action) {
-            "a" -> handleApproval(e, member, url, questionChannel)
-            "wl" -> handleWrongLink(e, member, questionChannel)
-            "ch" -> handleCoursesHidden(e, member, questionChannel)
-            "no" -> handleNotOwned(e, member, questionChannel)
-            "u" -> handleUndo(e, info, member, url, questionChannel)
+            "a" -> approve(e, member, url, questionChannel)
+            "wl" -> wrongLink(e, member, questionChannel)
+            "ch" -> coursesHidden(e, member, questionChannel)
+            "no" -> notOwned(e, member, questionChannel)
+            "u" -> undo(e, info, member, url, questionChannel)
         }
     }
 
@@ -98,7 +100,7 @@ class VerificationListener : ListenerAdapter() {
         return allowedRoles.any { it in memberRoles }
     }
 
-    private fun handleApproval(e: ButtonInteractionEvent, member: net.dv8tion.jda.api.entities.Member, url: String, questionChannel: net.dv8tion.jda.api.entities.channel.concrete.TextChannel?) {
+    private fun approve(e: ButtonInteractionEvent, member: Member, url: String, questionChannel: TextChannel?) {
         val guild = e.guild!!
         guild.addRoleToMember(member, guild.getRoleById(Environment["STUDENT_ROLE_ID"])!!).queue()
 
@@ -118,7 +120,7 @@ class VerificationListener : ListenerAdapter() {
         updateVerificationMessage(e, member, "has approved :mention:'s profile")
     }
 
-    private fun handleWrongLink(e: ButtonInteractionEvent, member: net.dv8tion.jda.api.entities.Member, questionChannel: net.dv8tion.jda.api.entities.channel.concrete.TextChannel?) {
+    private fun wrongLink(e: ButtonInteractionEvent, member: Member, questionChannel: TextChannel?) {
         questionChannel!!.sendMessage(member.asMention).setEmbeds(
             embed()
                 .setTitle("Profile Verification")
@@ -138,7 +140,7 @@ class VerificationListener : ListenerAdapter() {
         updateVerificationMessage(e, member, "hasn't approved :mention:, as they specified an invalid link")
     }
 
-    private fun handleCoursesHidden(e: ButtonInteractionEvent, member: net.dv8tion.jda.api.entities.Member, questionChannel: net.dv8tion.jda.api.entities.channel.concrete.TextChannel?) {
+    private fun coursesHidden(e: ButtonInteractionEvent, member: Member, questionChannel: TextChannel?) {
         questionChannel!!.sendMessage(member.asMention).setEmbeds(
             embed()
                 .setTitle("Profile Verification")
@@ -157,7 +159,7 @@ class VerificationListener : ListenerAdapter() {
         updateVerificationMessage(e, member, "hasn't approved :mention:, as they're unable to view their courses")
     }
 
-    private fun handleNotOwned(e: ButtonInteractionEvent, member: net.dv8tion.jda.api.entities.Member, questionChannel: net.dv8tion.jda.api.entities.channel.concrete.TextChannel?) {
+    private fun notOwned(e: ButtonInteractionEvent, member: Member, questionChannel: TextChannel?) {
         questionChannel!!.sendMessage(member.asMention).setEmbeds(
             embed()
                 .setTitle("Profile Verification")
@@ -168,7 +170,7 @@ class VerificationListener : ListenerAdapter() {
         updateVerificationMessage(e, member, "hasn't approved :mention:, as they do not own the course")
     }
 
-    private fun handleUndo(e: ButtonInteractionEvent, info: List<String>, member: net.dv8tion.jda.api.entities.Member, url: String, questionChannel: net.dv8tion.jda.api.entities.channel.concrete.TextChannel?) {
+    private fun undo(e: ButtonInteractionEvent, info: List<String>, member: Member, url: String, questionChannel: TextChannel?) {
         val originalActionTaker = info[4]
         if (e.member!!.id != originalActionTaker && !e.member!!.roles.contains(e.guild!!.getRoleById(Environment["MANAGEMENT_ROLE_ID"])!!)) {
             e.reply("Sorry, you can't undo that verification decision.").setEphemeral(true).queue()
@@ -211,7 +213,7 @@ class VerificationListener : ListenerAdapter() {
         ).queue()
     }
 
-    private fun updateVerificationMessage(e: ButtonInteractionEvent, member: net.dv8tion.jda.api.entities.Member, description: String) {
+    private fun updateVerificationMessage(e: ButtonInteractionEvent, member: Member, description: String) {
         e.message.editMessageEmbeds(
             embed()
                 .setTitle("Profile Verification")
@@ -228,7 +230,7 @@ class VerificationListener : ListenerAdapter() {
         e.interaction.deferEdit().queue()
     }
 
-    private fun sendPrivateMessage(member: net.dv8tion.jda.api.entities.Member, message: String) {
+    private fun sendPrivateMessage(member: Member, message: String) {
         member.user.openPrivateChannel().queue({ channel ->
             channel.sendMessageEmbeds(
                 embed()
